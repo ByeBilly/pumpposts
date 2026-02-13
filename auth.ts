@@ -13,6 +13,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     adapter: PrismaAdapter(prisma),
     providers: [
         Resend({
+            apiKey: process.env.RESEND_API_KEY,
             from: "onboarding@resend.dev",
         }),
     ],
@@ -54,5 +55,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     pages: {
         signIn: "/login",
         verifyRequest: "/login/verify", // Custom verification page
+    },
+    debug: process.env.NODE_ENV === "development",
+    logger: {
+        error(error: Error) {
+            console.error("NextAuth Error:", error);
+        },
+        warn(code: string) {
+            console.warn("NextAuth Warning:", code);
+        },
+        debug(message: string, metadata?: unknown) {
+            console.log("NextAuth Debug:", message, metadata);
+        },
     },
 });
