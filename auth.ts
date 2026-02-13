@@ -15,6 +15,39 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         Resend({
             apiKey: process.env.RESEND_API_KEY,
             from: "onboarding@resend.dev",
+            async sendVerificationRequest({ identifier: email, url, provider }) {
+                console.log("[NextAuth] sendVerificationRequest called");
+                console.log("[NextAuth] Email:", email);
+                console.log("[NextAuth] URL:", url);
+
+                if (!process.env.RESEND_API_KEY) {
+                    console.error("[NextAuth] RESEND_API_KEY is missing!");
+                    throw new Error("RESEND_API_KEY is not configured");
+                }
+
+                console.log("[NextAuth] Attempting to send email via Resend...");
+
+                const { Resend } = await import("resend");
+                const resend = new Resend(process.env.RESEND_API_KEY);
+
+                try {
+                    const result = await resend.emails.send({
+                        from: provider.from as string,
+                        to: email,
+                        subject: "Sign in to PumpPosts",
+                        html: `
+                            <p>Click the link below to sign in to PumpPosts:</p>
+                            <p><a href="${url}">Sign in</a></p>
+                            <p>This link will expire in 24 hours.</p>
+                        `,
+                    });
+
+                    console.log("[NextAuth] Email sent successfully:", result);
+                } catch (error) {
+                    console.error("[NextAuth] Failed to send email:", error);
+                    throw error;
+                }
+            },
         }),
     ],
     callbacks: {
