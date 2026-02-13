@@ -30,6 +30,8 @@ export default function LoginPage() {
             if (result?.error) {
                 if (result.error === "AccessDenied") {
                     setError("This email is not authorized to access the Master Hub.");
+                } else if (result.error === "Configuration") {
+                    setError("Server misconfiguration: RESEND_API_KEY is missing or invalid. Check Vercel env vars.");
                 } else {
                     setError("Failed to send login code. Check your connection.");
                 }

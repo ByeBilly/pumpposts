@@ -3,7 +3,9 @@ import Resend from "next-auth/providers/resend";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 
-// List of authorized emails for the Master Hub
+const RESEND_API_KEY = process.env.RESEND_API_KEY ?? process.env.AUTH_RESEND_KEY;
+const EMAIL_FROM = process.env.EMAIL_FROM ?? "PumpPosts <onboarding@resend.dev>";
+
 const AUTHORIZED_EMAILS = [
     "billiamglobal@gmail.com",
     "gladiuslumen@gmail.com",
@@ -11,41 +13,35 @@ const AUTHORIZED_EMAILS = [
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
     adapter: PrismaAdapter(prisma),
+    trustHost: true,
     providers: [
         Resend({
-            apiKey: process.env.RESEND_API_KEY,
-            from: "onboarding@resend.dev",
+            apiKey: RESEND_API_KEY ?? undefined,
+            from: EMAIL_FROM,
             async sendVerificationRequest({ identifier: email, url, provider }) {
-                console.log("[NextAuth] sendVerificationRequest called");
-                console.log("[NextAuth] Email:", email);
-                console.log("[NextAuth] URL:", url);
-
-                if (!process.env.RESEND_API_KEY) {
-                    console.error("[NextAuth] RESEND_API_KEY is missing!");
-                    throw new Error("RESEND_API_KEY is not configured");
+                if (!RESEND_API_KEY) {
+                    const msg = "RESEND_API_KEY or AUTH_RESEND_KEY is not set. Add it to Vercel Environment Variables for production.";
+                    console.error("[NextAuth]", msg);
+                    throw new Error(msg);
                 }
 
-                console.log("[NextAuth] Attempting to send email via Resend...");
+                const { Resend: ResendClient } = await import("resend");
+                const resend = new ResendClient(RESEND_API_KEY);
 
-                const { Resend } = await import("resend");
-                const resend = new Resend(process.env.RESEND_API_KEY);
+                const result = await resend.emails.send({
+                    from: provider.from as string,
+                    to: email,
+                    subject: "Sign in to PumpPosts",
+                    html: `
+                        <p>Click the link below to sign in to PumpPosts:</p>
+                        <p><a href="${url}">Sign in</a></p>
+                        <p>This link will expire in 24 hours.</p>
+                    `,
+                });
 
-                try {
-                    const result = await resend.emails.send({
-                        from: provider.from as string,
-                        to: email,
-                        subject: "Sign in to PumpPosts",
-                        html: `
-                            <p>Click the link below to sign in to PumpPosts:</p>
-                            <p><a href="${url}">Sign in</a></p>
-                            <p>This link will expire in 24 hours.</p>
-                        `,
-                    });
-
-                    console.log("[NextAuth] Email sent successfully:", result);
-                } catch (error) {
-                    console.error("[NextAuth] Failed to send email:", error);
-                    throw error;
+                if (result.error) {
+                    console.error("[NextAuth] Resend error:", result.error);
+                    throw new Error(result.error.message ?? "Failed to send email");
                 }
             },
         }),
@@ -53,24 +49,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     callbacks: {
         async signIn({ user }) {
             if (!user.email) return false;
-
-            // Only allow authorized emails to log in
             const isAuthorized = AUTHORIZED_EMAILS.includes(user.email.toLowerCase());
+            if (!isAuthorized) return false;
 
-            if (isAuthorized) {
-                // Automatically promote billiamglobal@gmail.com to ADMIN if they aren't already
-                await prisma.user.upsert({
-                    where: { email: user.email.toLowerCase() },
-                    update: { role: "ADMIN" },
-                    create: {
-                        email: user.email.toLowerCase(),
-                        role: "ADMIN"
-                    },
-                });
-                return true;
-            }
-
-            return false; // Access Denied for everyone else
+            // Ensure user exists and is ADMIN
+            await prisma.user.upsert({
+                where: { email: user.email.toLowerCase() },
+                update: { role: "ADMIN" },
+                create: { email: user.email.toLowerCase(), role: "ADMIN" },
+            });
+            return true;
         },
         async session({ session, token }) {
             if (token?.sub) {
