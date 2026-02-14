@@ -19,6 +19,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             apiKey: RESEND_API_KEY ?? undefined,
             from: EMAIL_FROM,
             async sendVerificationRequest({ identifier: email, url, provider }) {
+                // Debug: log env presence at request time (safe, no full secrets)
+                const hasResendKey = !!RESEND_API_KEY;
+                const hasAuthSecret = !!(process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET);
+                const baseUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL;
+                console.log("[NextAuth] sendVerificationRequest env check:", {
+                    hasResendKey,
+                    hasAuthSecret,
+                    hasAuthUrl: !!baseUrl,
+                });
+                if (RESEND_API_KEY && RESEND_API_KEY.length >= 8) {
+                    console.log("[NextAuth] RESEND_API_KEY masked:", `${RESEND_API_KEY.slice(0, 4)}...${RESEND_API_KEY.slice(-4)}`);
+                }
                 if (!RESEND_API_KEY) {
                     const msg = "RESEND_API_KEY or AUTH_RESEND_KEY is not set. Add it to Vercel Environment Variables for production.";
                     console.error("[NextAuth]", msg);
