@@ -23,7 +23,12 @@ import { HubBridgeSettings } from "@/components/sites/hub-bridge-settings";
 
 export default async function SiteDetailPage({ params }: { params: { id: string } }) {
     const session = await auth();
+    const scope = (session as { scope?: string })?.scope;
+
     if (!session) redirect("/login");
+    if (scope && scope !== "all" && scope !== params.id) {
+        redirect("/dashboard");
+    }
 
     // Mocking turnerinstalls.com.au for the demo
     const site = {

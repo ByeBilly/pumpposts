@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
 import { readdir } from "fs/promises";
 import path from "path";
 
 export async function GET(req: NextRequest) {
     try {
-        const session = await auth();
-        if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
         const { searchParams } = new URL(req.url);
         const siteSlug = searchParams.get("siteSlug") || "all";
 

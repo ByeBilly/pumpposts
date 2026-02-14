@@ -1,7 +1,10 @@
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Activity, Globe, Plus, Rocket, CreditCard, Users, Zap, LogOut } from "lucide-react";
+import { Activity, Globe, Plus, Rocket, CreditCard, Users, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,25 +17,37 @@ import {
     DialogTitle,
     DialogTrigger
 } from "@/components/ui/dialog";
-import { auth, signOut } from "@/auth";
-import { redirect } from "next/navigation";
 import Link from "next/link";
-import { SignOutButton } from "@/components/auth/sign-out-button";
 import { MediaVault } from "@/components/dashboard/media-vault";
+import { SignOutButton } from "@/components/auth/sign-out-button";
 
 export default async function Dashboard() {
     const session = await auth();
+    const scope = (session as { scope?: string })?.scope;
 
-    if (!session) {
-        redirect("/login");
+    if (!session) redirect("/login");
+
+    // Single-site users: redirect to their site dashboard
+    if (scope && scope !== "all") {
+        redirect(`/dashboard/sites/${scope}`);
     }
 
-    // SaaS Multi-tenant Mock Data (User's Core Fleet)
-    const sites = [
-        { id: "1", name: "Turner Installs", domain: "turnerinstalls.com.au", status: "Healthy", plan: "PRO", usage: 42, limit: 500 },
-        { id: "2", name: "INURPC", domain: "inurpc.com", status: "Healthy", plan: "PRO", usage: 12, limit: 500 },
-        { id: "3", name: "Receptionists", domain: "receptionists.net.au", status: "Healthy", plan: "AGENCY", usage: 85, limit: 2000 },
-    ];
+    const dbSites = await prisma.site.findMany({ orderBy: { name: "asc" } });
+    const sites = dbSites.length > 0
+        ? dbSites.map((s) => ({
+            id: s.id,
+            name: s.name,
+            domain: s.domain,
+            status: "Healthy" as const,
+            plan: s.plan === "AGENCY" ? "AGENCY" : "PRO" as const,
+            usage: s.currentMonthPosts,
+            limit: s.monthlyPostLimit,
+        }))
+        : [
+            { id: "1", name: "Turner Installs", domain: "turnerinstalls.com.au", status: "Healthy" as const, plan: "PRO" as const, usage: 42, limit: 500 },
+            { id: "2", name: "INURPC", domain: "inurpc.com", status: "Healthy" as const, plan: "PRO" as const, usage: 12, limit: 500 },
+            { id: "3", name: "Receptionists", domain: "receptionists.net.au", status: "Healthy" as const, plan: "AGENCY" as const, usage: 85, limit: 2000 },
+        ];
 
     return (
         <div className="min-h-screen bg-zinc-950 text-white p-4 md:p-8 selection:bg-orange-500/30">

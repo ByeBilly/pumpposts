@@ -8,7 +8,7 @@ export function SignOutButton() {
     return (
         <Button
             variant="outline"
-            onClick={() => signOut({ callbackUrl: "/" })}
+            onClick={() => signOut({ callbackUrl: "/login" })}
             className="border-white/5 text-zinc-500 hover:text-white bg-white/[0.02] h-11 px-4"
         >
             <LogOut size={16} className="mr-2" />

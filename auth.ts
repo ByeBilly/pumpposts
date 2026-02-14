@@ -1,120 +1,68 @@
-// ⚠ TEMP ADMIN BYPASS ENABLED – REMOVE BEFORE PUBLIC LAUNCH
 import NextAuth from "next-auth";
-import Resend from "next-auth/providers/resend";
-import { PrismaAdapter } from "@auth/prisma-adapter";
+import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY ?? process.env.AUTH_RESEND_KEY;
-const EMAIL_FROM = process.env.EMAIL_FROM ?? "PumpPosts <onboarding@resend.dev>";
+// Email → scope: "all" = full access, siteId = single-site access
+const EMAIL_SCOPE_MAP: Record<string, "all" | string> = {
+    "billiamglobal@gmail.com": "all",
+    "liam@turnerinstalls.com.au": "turnerinstalls.com.au",
+    "gladiuslumen@gmail.com": "receptionists.net.au",
+};
 
-const AUTHORIZED_EMAILS = [
-    "billiamglobal@gmail.com",
-    "gladiuslumen@gmail.com",
-];
+const AUTHORIZED_EMAILS = Object.keys(EMAIL_SCOPE_MAP);
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-    adapter: PrismaAdapter(prisma),
-    trustHost: true,
     providers: [
-        Resend({
-            apiKey: RESEND_API_KEY ?? undefined,
-            from: EMAIL_FROM,
-            async sendVerificationRequest({ identifier: email, url, provider }) {
-                // Debug: log env presence at request time (safe, no full secrets)
-                const hasResendKey = !!RESEND_API_KEY;
-                const hasAuthSecret = !!(process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET);
-                const baseUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL;
-                console.log("[NextAuth] sendVerificationRequest env check:", {
-                    hasResendKey,
-                    hasAuthSecret,
-                    hasAuthUrl: !!baseUrl,
-                });
-                if (RESEND_API_KEY && RESEND_API_KEY.length >= 8) {
-                    console.log("[NextAuth] RESEND_API_KEY masked:", `${RESEND_API_KEY.slice(0, 4)}...${RESEND_API_KEY.slice(-4)}`);
-                }
-                if (!RESEND_API_KEY) {
-                    const msg = "RESEND_API_KEY or AUTH_RESEND_KEY is not set. Add it to Vercel Environment Variables for production.";
-                    console.error("[NextAuth]", msg);
-                    throw new Error(msg);
+        Credentials({
+            name: "Email",
+            credentials: {
+                email: { label: "Email", type: "email" },
+            },
+            async authorize(credentials) {
+                const email = credentials?.email?.toString()?.toLowerCase()?.trim();
+                if (!email || !AUTHORIZED_EMAILS.includes(email)) return null;
+
+                const scopeKey = EMAIL_SCOPE_MAP[email];
+                let scope: string = scopeKey;
+
+                if (scopeKey !== "all") {
+                    const site = await prisma.site.findUnique({
+                        where: { domain: scopeKey },
+                    });
+                    if (!site) return null;
+                    scope = site.id;
                 }
 
-                const { Resend: ResendClient } = await import("resend");
-                const resend = new ResendClient(RESEND_API_KEY);
-
-                const result = await resend.emails.send({
-                    from: provider.from as string,
-                    to: email,
-                    subject: "Sign in to PumpPosts",
-                    html: `
-                        <p>Click the link below to sign in to PumpPosts:</p>
-                        <p><a href="${url}">Sign in</a></p>
-                        <p>This link will expire in 24 hours.</p>
-                    `,
-                });
-
-                if (result.error) {
-                    console.error("[NextAuth] Resend error:", result.error);
-                    throw new Error(result.error.message ?? "Failed to send email");
-                }
+                return {
+                    id: scope === "all" ? "admin" : scope,
+                    email,
+                    name: email,
+                    scope,
+                };
             },
         }),
     ],
     callbacks: {
-        async signIn({ user }) {
-            if (!user?.email) return false;
-
-            const email = user.email.toLowerCase();
-
-            // TEMPORARY ADMIN BYPASS (REMOVE BEFORE PRODUCTION LAUNCH)
-            const bypassEmails = [
-                "billiamglobal@gmail.com",
-                "gladiuslumen@gmail.com",
-            ];
-
-            if (bypassEmails.includes(email)) {
-                console.log("Admin bypass login granted:", email);
-                return true;
-            }
-
-            // Existing authorization logic (if any) continues below
-            const isAuthorized = AUTHORIZED_EMAILS.includes(email);
-            if (!isAuthorized) return false;
-
-            // Ensure user exists and is ADMIN
-            await prisma.user.upsert({
-                where: { email },
-                update: { role: "ADMIN" },
-                create: { email, role: "ADMIN" },
-            });
-            return true;
-        },
-        async session({ session, token }) {
-            if (token?.sub) {
-                session.user.id = token.sub;
-            }
-            return session;
-        },
         async jwt({ token, user }) {
             if (user) {
                 token.sub = user.id;
+                token.email = user.email;
+                token.scope = (user as { scope?: string }).scope;
             }
             return token;
+        },
+        async session({ session, token }) {
+            if (session.user) {
+                session.user.id = token.sub ?? "";
+                session.user.email = token.email ?? "";
+                (session as { scope?: string }).scope = token.scope as string;
+            }
+            return session;
         },
     },
     pages: {
         signIn: "/login",
-        verifyRequest: "/login/verify", // Custom verification page
     },
-    debug: process.env.NODE_ENV === "development",
-    logger: {
-        error(error: Error) {
-            console.error("NextAuth Error:", error);
-        },
-        warn(code: string) {
-            console.warn("NextAuth Warning:", code);
-        },
-        debug(message: string, metadata?: unknown) {
-            console.log("NextAuth Debug:", message, metadata);
-        },
-    },
+    trustHost: true,
+    session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
 });

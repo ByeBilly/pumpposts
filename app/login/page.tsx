@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,8 +12,8 @@ import Link from "next/link";
 export default function LoginPage() {
     const [email, setEmail] = useState("");
     const [isLoading, setIsLoading] = useState(false);
-    const [isSent, setIsSent] = useState(false);
     const [error, setError] = useState("");
+    const router = useRouter();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -20,56 +21,27 @@ export default function LoginPage() {
         setError("");
 
         try {
-            // Trigger Magic Link email
-            const result = await signIn("resend", {
-                email: email.toLowerCase(),
+            const result = await signIn("credentials", {
+                email: email.toLowerCase().trim(),
                 redirect: false,
                 callbackUrl: "/dashboard",
             });
 
             if (result?.error) {
-                if (result.error === "AccessDenied") {
-                    setError("This email is not authorized to access the Master Hub.");
-                } else if (result.error === "Configuration") {
-                    setError("Server misconfiguration: RESEND_API_KEY is missing or invalid. Check Vercel env vars.");
-                } else {
-                    setError("Failed to send login code. Check your connection.");
-                }
-            } else {
-                setIsSent(true);
+                setError("Access denied. This email is not authorized.");
+            } else if (result?.ok) {
+                router.push("/dashboard");
+                router.refresh();
             }
-        } catch (err) {
+        } catch {
             setError("An unexpected error occurred.");
         } finally {
             setIsLoading(false);
         }
     };
 
-    if (isSent) {
-        return (
-            <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center p-6 text-center">
-                <div className="w-20 h-20 bg-orange-600/20 rounded-full flex items-center justify-center mb-6 animate-pulse border border-orange-600/30">
-                    <Mail className="text-orange-500 h-10 w-10" />
-                </div>
-                <h2 className="text-3xl font-black text-white italic uppercase tracking-tighter mb-2">Check Your Inbox</h2>
-                <p className="text-zinc-500 max-w-sm mb-8">
-                    A security login link has been sent to <span className="text-white font-bold">{email}</span>.
-                    The link will expire in 24 hours.
-                </p>
-                <Button
-                    variant="outline"
-                    onClick={() => setIsSent(false)}
-                    className="bg-transparent border-white/10 text-zinc-500 hover:text-white"
-                >
-                    Try another email
-                </Button>
-            </div>
-        );
-    }
-
     return (
         <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center p-6 selection:bg-orange-500/30">
-            {/* Background Glow */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-orange-600/5 blur-[120px] rounded-full -z-10" />
 
             <Link href="/" className="flex items-center gap-2 mb-8 group transition-transform hover:scale-105">
@@ -86,13 +58,13 @@ export default function LoginPage() {
                     </div>
                     <CardTitle className="text-3xl font-black text-white italic tracking-tight uppercase">Secure Entry</CardTitle>
                     <CardDescription className="text-zinc-500">
-                        Enter your authorized email to receive a secure login link.
+                        Enter your authorized email to access the dashboard.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="pb-10">
                     <form onSubmit={handleSubmit} className="space-y-5">
                         <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Master Email Address</label>
+                            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Email Address</label>
                             <div className="relative">
                                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-600 h-5 w-5" />
                                 <Input
@@ -121,7 +93,7 @@ export default function LoginPage() {
                                 <Loader2 className="animate-spin" />
                             ) : (
                                 <>
-                                    Send Login Link
+                                    Enter
                                     <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
                                 </>
                             )}
@@ -139,7 +111,7 @@ export default function LoginPage() {
             <div className="mt-8 flex items-center gap-4 text-[10px] font-mono text-zinc-700 uppercase tracking-widest">
                 <span>ENCRYPTED</span>
                 <div className="w-1 h-1 bg-zinc-800 rounded-full" />
-                <span>V1.0.1-OTP</span>
+                <span>V1.0.1</span>
                 <div className="w-1 h-1 bg-zinc-800 rounded-full" />
                 <span>FIREWALL_ACTIVE</span>
             </div>
