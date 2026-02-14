@@ -1,3 +1,4 @@
+// ⚠ TEMP ADMIN BYPASS ENABLED – REMOVE BEFORE PUBLIC LAUNCH
 import NextAuth from "next-auth";
 import Resend from "next-auth/providers/resend";
 import { PrismaAdapter } from "@auth/prisma-adapter";
@@ -60,15 +61,30 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     ],
     callbacks: {
         async signIn({ user }) {
-            if (!user.email) return false;
-            const isAuthorized = AUTHORIZED_EMAILS.includes(user.email.toLowerCase());
+            if (!user?.email) return false;
+
+            const email = user.email.toLowerCase();
+
+            // TEMPORARY ADMIN BYPASS (REMOVE BEFORE PRODUCTION LAUNCH)
+            const bypassEmails = [
+                "billiamglobal@gmail.com",
+                "gladiuslumen@gmail.com",
+            ];
+
+            if (bypassEmails.includes(email)) {
+                console.log("Admin bypass login granted:", email);
+                return true;
+            }
+
+            // Existing authorization logic (if any) continues below
+            const isAuthorized = AUTHORIZED_EMAILS.includes(email);
             if (!isAuthorized) return false;
 
             // Ensure user exists and is ADMIN
             await prisma.user.upsert({
-                where: { email: user.email.toLowerCase() },
+                where: { email },
                 update: { role: "ADMIN" },
-                create: { email: user.email.toLowerCase(), role: "ADMIN" },
+                create: { email, role: "ADMIN" },
             });
             return true;
         },
